@@ -238,6 +238,7 @@ func AddConfig(graph adder) {
 func AddNetwork(graph adder) {
 	graph.Add(
 		newDockerClient,
+		newServerHandlerFactory,
 		newServerHandler,
 		newHTTPStateManager,
 	)
@@ -302,6 +303,7 @@ func AddInternals(graph adder) {
 		newHTTPClientBundle,
 		newClusterSpecificHTTPClient,
 		NewR11nQueueSet,
+		newQueueSet,
 	)
 }
 
@@ -556,18 +558,54 @@ func newDeployer(dryrun DryrunOption, nc lazyNameCache, ls LogSink, c LocalSousC
 	), nil
 }
 
-func newServerHandler(g *SousGraph, ComponentLocator server.ComponentLocator, metrics MetricsHandler, log LogSink) ServerHandler {
-	var handler http.Handler
+// ServerHandlerFactory produces a ServerHandler when invoked.
+type ServerHandlerFactory func() (ServerHandler, error)
 
-	profileQuery := struct{ Yes ProfilingServer }{}
-	g.Inject(&profileQuery)
-	if profileQuery.Yes {
-		handler = server.ProfilingHandler(ComponentLocator, metrics, log.Child("http-server"))
-	} else {
-		handler = server.Handler(ComponentLocator, metrics, log.Child("http-server"))
+func newServerHandlerFactory(g *SousGraph, metrics MetricsHandler, log LogSink) ServerHandlerFactory {
+	return func() (ServerHandler, error) {
+
+		clScoop := struct {
+			LogSink
+			LocalSousConfig
+			sous.Inserter
+			*ServerStateManager
+			*sous.ResolveFilter
+			*sous.AutoResolver
+			semv.Version
+			*sous.R11nQueueSet
+		}{}
+
+		if err := g.Inject(&clScoop); err != nil {
+			return ServerHandler{}, err
+		}
+
+		cl := newServerComponentLocator(
+			clScoop.LogSink,
+			clScoop.LocalSousConfig,
+			clScoop.Inserter,
+			clScoop.ServerStateManager,
+			clScoop.ResolveFilter,
+			clScoop.AutoResolver,
+			clScoop.Version,
+			clScoop.R11nQueueSet,
+		)
+
+		var handler http.Handler
+
+		profileQuery := struct{ Yes ProfilingServer }{}
+		g.Inject(&profileQuery)
+		if profileQuery.Yes {
+			handler = server.ProfilingHandler(cl, metrics, log.Child("http-server"))
+		} else {
+			handler = server.Handler(cl, metrics, log.Child("http-server"))
+		}
+
+		return ServerHandler{handler}, nil
 	}
+}
 
-	return ServerHandler{handler}
+func newServerHandler(f ServerHandlerFactory) (ServerHandler, error) {
+	return f()
 }
 
 func newServerListData(c HTTPClient) (ServerListData, error) {
@@ -607,11 +645,15 @@ func newClusterSpecificHTTPClient(clients ClientBundle, rf *sous.ResolveFilter, 
 
 // newHTTPClient returns an HTTP client if c.Server is not empty.
 // Otherwise it returns nil, and emits some warnings.
-func newHTTPClient(c LocalSousConfig, user sous.User, srvr ServerHandler, tid sous.TraceID, log LogSink) (HTTPClient, error) {
+func newHTTPClient(c LocalSousConfig, user sous.User, srvr ServerHandlerFactory, tid sous.TraceID, log LogSink) (HTTPClient, error) {
 	if c.Server == "" {
 		messages.ReportLogFieldsMessageToConsole("No server set, Sous is running in server or workstation mode.", logging.WarningLevel, log)
 		messages.ReportLogFieldsMessageToConsole("Configure a server like this: sous config server http://some.sous.server", logging.WarningLevel, log)
-		cl, err := restful.NewInMemoryClient(srvr.Handler, log.Child("local-http"))
+		s, err := srvr()
+		if err != nil {
+			return HTTPClient{}, err
+		}
+		cl, err := restful.NewInMemoryClient(s.Handler, log.Child("local-http"))
 		return HTTPClient{HTTPClient: cl}, err
 	}
 	messages.ReportLogFieldsMessageToConsole(fmt.Sprintf("Using server %s", c.Server), logging.ExtraDebug1Level, log)

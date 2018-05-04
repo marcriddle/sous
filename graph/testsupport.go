@@ -58,7 +58,7 @@ func TestGraphWithConfig(t *testing.T, v semv.Version, in io.Reader, out, err io
 	testGraph.Replace(sous.User{Name: "Test User", Email: "testuser@example.com"})
 	testGraph.Replace(NewTestConfigLoader)
 	testGraph.Replace(newDummyDockerClient)
-	testGraph.Replace(newServerHandler)
+	testGraph.Replace(newServerHandlerFactory)
 	testGraph.Replace(newServerStateManager)
 	testGraph.Replace(MaybeDatabase{Db: db, Err: nil})
 

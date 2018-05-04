@@ -2,6 +2,7 @@ package singularity
 
 import (
 	"fmt"
+	"log"
 
 	sous "github.com/opentable/sous/lib"
 	"github.com/pkg/errors"
@@ -32,7 +33,9 @@ func (r *deployer) Status(reg sous.Registry, clusters sous.Clusters, pair *sous.
 
 	reqParent, err := client.GetRequest(reqID, false) //don't use the web cache
 	if err != nil {
-		return nil, errors.Wrapf(err, "getting request")
+		err := errors.Wrapf(err, "getting singularity request")
+		log.Print(err)
+		return nil, err
 	}
 
 	singReq := SingReq{

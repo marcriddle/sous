@@ -163,7 +163,7 @@ func injectedStateManager(t *testing.T, cfg *config.Config) *StateManager {
 	g.Add(&config.DeployFilterFlags{})
 	g.Add(newResolver)
 	g.Add(newAutoResolver)
-	g.Add(newServerHandler)
+	g.Add(newServerHandlerFactory)
 	g.Add(newHTTPClient)
 	g.Add(newHTTPClientBundle)
 	g.Add(NewR11nQueueSet)

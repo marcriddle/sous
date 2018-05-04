@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"github.com/opentable/sous/config"
 	sous "github.com/opentable/sous/lib"
 	"github.com/opentable/sous/server"
 	"github.com/samsalisbury/semv"
@@ -34,6 +35,18 @@ func newServerComponentLocator(
 
 }
 
+func newClusterManager(sm *ServerStateManager) sous.ClusterManager {
+	return sous.MakeClusterManager(sm.StateManager)
+}
+
+func newSousStateManager(sm *ServerStateManager) sous.StateManager {
+	return sm.StateManager
+}
+
+func newConfig(c LocalSousConfig) *config.Config {
+	return c.Config
+}
+
 // NewR11nQueueSet returns a new queue set configured to start processing r11ns
 // immediately.
 func NewR11nQueueSet(d sous.Deployer, r sous.Registry, rf *sous.ResolveFilter, sm *ServerStateManager) *sous.R11nQueueSet {
@@ -43,4 +56,8 @@ func NewR11nQueueSet(d sous.Deployer, r sous.Registry, rf *sous.ResolveFilter, s
 			qr.Rectification.Begin(d, r, rf, sr)
 			return qr.Rectification.Wait()
 		}))
+}
+
+func newQueueSet(qs *sous.R11nQueueSet) sous.QueueSet {
+	return qs
 }
